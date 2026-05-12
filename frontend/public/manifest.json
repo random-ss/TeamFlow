@@ -1,0 +1,27 @@
+{
+  "name": "TeamFlow",
+  "short_name": "TeamFlow",
+  "description": "TeamFlow is a collaborative workspace for posts, tasks, projects, chat, and shared team knowledge.",
+  "id": "/",
+  "scope": "/",
+  "start_url": "/posts",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["productivity", "business"]
+}
