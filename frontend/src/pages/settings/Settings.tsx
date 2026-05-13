@@ -1,5 +1,5 @@
 ﻿import { useState, useRef } from 'react'
-import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   UserCog, Wrench, Palette, Bell, Users, Crown, Shield,
   Copy, Check, Camera, Loader2, Trash2, Moon, Sun,
@@ -55,7 +55,7 @@ function SidebarNav({ items }: { items: typeof sidebarNavItems }) {
         {items.map((item) => {
           const isActive = pathname === item.href
           return (
-            <NavLink
+            <Link
               key={item.href}
               to={item.href}
               className={cn(
@@ -67,7 +67,7 @@ function SidebarNav({ items }: { items: typeof sidebarNavItems }) {
             >
               <item.icon className='size-4 shrink-0' />
               {item.title}
-            </NavLink>
+            </Link>
           )
         })}
       </nav>

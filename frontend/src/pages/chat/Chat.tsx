@@ -9,11 +9,12 @@ import { Separator } from '../../components/ui/separator'
 import { cn } from '../../lib/utils'
 import {
   Send, Paperclip, Hash, Download, X, Loader2, Trash2,
-  MessagesSquare, Edit, Search,
-  MoreVertical, ArrowLeft,
+  MessagesSquare, Edit, Search, ArrowLeft, Users, Pencil, SmilePlus,
 } from 'lucide-react'
 import { format, isToday, isYesterday, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
+
+const CHAT_REACTIONS = ['👍', '❤️', '😂', '😮', '🔥', '✅']
 
 function formatMsgTime(ts: string) {
   const d = parseISO(ts)
@@ -56,8 +57,147 @@ function FileAttachment({ attachment, isOwn }: { attachment: any; isOwn: boolean
   )
 }
 
+function ComposeModal({ members, onClose, onSent }: {
+  members: any[]
+  onClose: () => void
+  onSent: () => void
+}) {
+  const { team } = useTeam()
+  const { user } = useAuth()
+  const [selected, setSelected] = useState<string[]>([])
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [pendingFile, setPendingFile] = useState<any>(null)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function toggle(uid: string) {
+    setSelected((prev) => prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid])
+  }
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingFile(true)
+    try {
+      const result = await uploadFileToCloudinary(file, 'teamflow/chat')
+      setPendingFile(result)
+    } catch (err: any) {
+      toast.error(err.message)
+    } finally {
+      setUploadingFile(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleSend() {
+    if (!text.trim() && !pendingFile) return
+    if (selected.length === 0) { toast.error('Select at least one recipient'); return }
+    setSending(true)
+    try {
+      await Promise.all(selected.map((uid) =>
+        api.sendDM(team.id, uid, text.trim() || null, pendingFile)
+      ))
+      toast.success(`Message sent to ${selected.length} ${selected.length === 1 ? 'person' : 'people'}`)
+      onSent()
+      onClose()
+    } catch (err: any) {
+      toast.error(err.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-xl border border-border bg-background shadow-xl flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-muted-foreground" />
+            <h3 className="font-semibold text-sm">New Message</h3>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-3 border-b border-border shrink-0">
+          <p className="text-xs text-muted-foreground mb-2 font-medium">Send to</p>
+          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+            {members.map((m: any) => (
+              <button
+                key={m.user_id}
+                onClick={() => toggle(m.user_id)}
+                className={cn(
+                  'flex items-center gap-3 px-2 py-1.5 rounded-md text-sm transition-colors text-left',
+                  selected.includes(m.user_id)
+                    ? 'bg-primary/10 text-primary'
+                    : 'hover:bg-muted text-foreground'
+                )}
+              >
+                <div className={cn(
+                  'w-4 h-4 rounded border-2 flex items-center justify-center shrink-0',
+                  selected.includes(m.user_id) ? 'bg-primary border-primary' : 'border-border'
+                )}>
+                  {selected.includes(m.user_id) && (
+                    <svg className="w-2.5 h-2.5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                <Avatar name={m.profiles?.name} src={m.profiles?.avatar_url} size="xs" />
+                <span className="font-medium">{m.profiles?.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-3 flex-1 min-h-0">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Type your message…"
+            rows={4}
+            className="w-full resize-none bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
+          />
+          {pendingFile && (
+            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 mt-2">
+              <Paperclip className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span className="text-xs text-foreground truncate flex-1">{pendingFile.name}</span>
+              <button onClick={() => setPendingFile(null)} className="text-muted-foreground hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between p-3 border-t border-border shrink-0">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploadingFile}
+            className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            title="Attach file"
+          >
+            {uploadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+          </button>
+          <input ref={fileRef} type="file" className="hidden" onChange={handleFileSelect} />
+          <button
+            onClick={handleSend}
+            disabled={sending || (!text.trim() && !pendingFile) || selected.length === 0}
+            className="btn-primary disabled:opacity-40"
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Send{selected.length > 1 ? ` to ${selected.length}` : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Chat() {
-  const { team, members } = useTeam()
+  const { team, members, isAdmin } = useTeam()
   const { user } = useAuth()
   const [activeConv, setActiveConv] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -69,6 +209,11 @@ export default function Chat() {
   const [uploadingFile, setUploadingFile] = useState(false)
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
   const [search, setSearch] = useState('')
+  const [showCompose, setShowCompose] = useState(false)
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const [msgReactions, setMsgReactions] = useState<Record<string, Record<string, { count: number; isOwn: boolean }>>>({})
+  const [emojiPickerMsgId, setEmojiPickerMsgId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -225,6 +370,81 @@ export default function Chat() {
     }
   }
 
+  async function handleEdit(msgId: string) {
+    const content = editContent.trim()
+    if (!content) return
+    try {
+      let updated: any
+      if (activeConv === 'team') {
+        const res = await api.editTeamMessage(msgId, content)
+        updated = res.message
+      } else {
+        const res = await api.editDM(msgId, content)
+        updated = res.message
+      }
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, ...updated } : m))
+      setEditingMsgId(null)
+      setEditContent('')
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+  }
+
+  useEffect(() => {
+    if (!messages.length || !user) return
+    const tableName = activeConv === 'team' ? 'team_messages' : 'direct_messages'
+    supabase
+      .from('message_reactions')
+      .select('*')
+      .in('message_id', messages.map((m) => m.id))
+      .eq('table_name', tableName)
+      .then(({ data }) => {
+        if (!data) return
+        const byMsg: Record<string, Record<string, { count: number; isOwn: boolean }>> = {}
+        for (const r of data) {
+          if (!byMsg[r.message_id]) byMsg[r.message_id] = {}
+          if (!byMsg[r.message_id][r.emoji]) byMsg[r.message_id][r.emoji] = { count: 0, isOwn: false }
+          byMsg[r.message_id][r.emoji].count++
+          if (r.user_id === user.id) byMsg[r.message_id][r.emoji].isOwn = true
+        }
+        setMsgReactions(byMsg)
+      })
+      .catch(() => {})
+  }, [messages.length, activeConv, user?.id])
+
+  async function handleMsgReact(msgId: string, emoji: string) {
+    const tableName = activeConv === 'team' ? 'team_messages' : 'direct_messages'
+    const isOwn = msgReactions[msgId]?.[emoji]?.isOwn ?? false
+    setEmojiPickerMsgId(null)
+    setMsgReactions((prev) => {
+      const msgRxns = { ...(prev[msgId] ?? {}) }
+      const cur = msgRxns[emoji] ?? { count: 0, isOwn: false }
+      if (!isOwn) {
+        msgRxns[emoji] = { count: cur.count + 1, isOwn: true }
+      } else {
+        const newCount = cur.count - 1
+        if (newCount <= 0) { delete msgRxns[emoji] } else { msgRxns[emoji] = { count: newCount, isOwn: false } }
+      }
+      return { ...prev, [msgId]: msgRxns }
+    })
+    try {
+      await api.toggleMessageReaction(msgId, tableName, emoji)
+    } catch (err: any) {
+      toast.error(err.message)
+      setMsgReactions((prev) => {
+        const msgRxns = { ...(prev[msgId] ?? {}) }
+        const cur = msgRxns[emoji] ?? { count: 0, isOwn: false }
+        if (!isOwn) {
+          const newCount = cur.count - 1
+          if (newCount <= 0) { delete msgRxns[emoji] } else { msgRxns[emoji] = { count: newCount, isOwn: false } }
+        } else {
+          msgRxns[emoji] = { count: cur.count + 1, isOwn: true }
+        }
+        return { ...prev, [msgId]: msgRxns }
+      })
+    }
+  }
+
   function selectConv(convId: string) {
     setActiveConv(convId)
     setMobileOpen(true)
@@ -234,6 +454,17 @@ export default function Chat() {
 
   return (
     <section className="flex h-full gap-6 overflow-hidden p-4 sm:p-6">
+      {emojiPickerMsgId && (
+        <div className="fixed inset-0 z-[9]" onClick={() => setEmojiPickerMsgId(null)} />
+      )}
+      {showCompose && (
+        <ComposeModal
+          members={otherMembers}
+          onClose={() => setShowCompose(false)}
+          onSent={() => {}}
+        />
+      )}
+
       {/* ── Left Panel ── */}
       <div className="flex w-full flex-col gap-2 sm:w-56 lg:w-72 2xl:w-80 shrink-0">
         <div>
@@ -244,11 +475,8 @@ export default function Chat() {
             </div>
             <button
               className="rounded-lg p-2 hover:bg-muted transition-colors"
-              title="Compose"
-              onClick={() => {
-                const first = otherMembers[0]
-                if (first) selectConv(first.user_id)
-              }}
+              title="New message"
+              onClick={() => setShowCompose(true)}
             >
               <Edit size={20} className="text-muted-foreground" />
             </button>
@@ -373,19 +601,13 @@ export default function Chat() {
                 </div>
               </div>
             </div>
-
-            <div className="-me-1 flex items-center gap-1">
-              <button className="flex h-10 w-8 items-center justify-center rounded-md hover:bg-muted transition-colors">
-                <MoreVertical className="text-muted-foreground size-5" />
-              </button>
-            </div>
           </div>
 
           {/* Messages area */}
           <div className="flex flex-1 flex-col gap-2 rounded-md px-4 pt-0 pb-4 overflow-hidden">
             <div className="flex size-full flex-1">
               <div className="relative flex flex-1 flex-col overflow-y-hidden -me-4">
-                <div className="flex h-40 w-full grow flex-col-reverse justify-start gap-4 overflow-y-auto py-2 pe-4 pb-4">
+                <div className="flex h-40 w-full grow flex-col justify-start gap-4 overflow-y-auto py-2 pe-4 pb-4">
                   {loadingMsgs ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
@@ -402,41 +624,144 @@ export default function Chat() {
                       </p>
                     </div>
                   ) : (
-                    messages.map((msg) => {
+                    messages.map((msg, idx) => {
                       const isOwn = msg.sender_id === user?.id
+                      const isEditing = editingMsgId === msg.id
+                      const prevMsg = idx > 0 ? messages[idx - 1] : null
+                      const isGrouped = prevMsg && prevMsg.sender_id === msg.sender_id &&
+                        (new Date(msg.created_at).getTime() - new Date(prevMsg.created_at).getTime()) < 5 * 60 * 1000
+                      const wasEdited = msg.updated_at && msg.updated_at !== msg.created_at
+
                       return (
-                        <div key={msg.id} className={cn('group flex gap-2.5', isOwn && 'flex-row-reverse')}>
+                        <div key={msg.id} className={cn('group flex gap-2.5', isOwn && 'flex-row-reverse', isGrouped ? 'mt-0.5' : 'mt-2')}>
                           {!isOwn && (
-                            <Avatar name={msg.sender?.name} src={msg.sender?.avatar_url} size="xs" className="mt-1 shrink-0" />
-                          )}
-                          <div className={cn('max-w-72', isOwn && 'flex flex-col items-end')}>
-                            {!isOwn && (
-                              <p className="text-[11px] text-muted-foreground mb-1 pl-1">{msg.sender?.name}</p>
-                            )}
-                            <div className={cn(
-                              'px-3 py-2 shadow-lg wrap-break-word',
-                              isOwn
-                                ? 'rounded-[16px_16px_0_16px] bg-primary/90 text-primary-foreground/75 self-end'
-                                : 'rounded-[16px_16px_16px_0] bg-muted self-start'
-                            )}>
-                              {msg.attachment && <FileAttachment attachment={msg.attachment} isOwn={isOwn} />}
-                              {msg.content && <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>}
-                              <span className={cn(
-                                'mt-1 block text-xs font-light italic text-foreground/75',
-                                isOwn && 'text-end text-primary-foreground/85'
-                              )}>
-                                {formatMsgTime(msg.created_at)}
-                              </span>
+                            <div className="shrink-0">
+                              {isGrouped
+                                ? <div className="w-6 h-6" />
+                                : <Avatar name={msg.sender?.name} src={msg.sender?.avatar_url} size="xs" className="mt-1" />
+                              }
                             </div>
+                          )}
+                          <div className={cn('max-w-[70%]', isOwn && 'flex flex-col items-end')}>
+                            {!isOwn && !isGrouped && (
+                              <p className="text-[11px] text-muted-foreground mb-1 pl-1 font-medium">{msg.sender?.name}</p>
+                            )}
+                            {isEditing ? (
+                              <div className="flex flex-col gap-1.5 w-full min-w-48">
+                                <textarea
+                                  autoFocus
+                                  value={editContent}
+                                  onChange={(e) => setEditContent(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEdit(msg.id) }
+                                    if (e.key === 'Escape') { setEditingMsgId(null); setEditContent('') }
+                                  }}
+                                  className="w-full rounded-xl border border-primary/40 bg-background px-3 py-2 text-sm text-foreground outline-none resize-none"
+                                  rows={2}
+                                />
+                                <div className="flex gap-1.5 justify-end">
+                                  <button
+                                    onClick={() => { setEditingMsgId(null); setEditContent('') }}
+                                    className="text-[10px] px-2 py-1 rounded-md text-muted-foreground hover:bg-muted transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => handleEdit(msg.id)}
+                                    className="text-[10px] px-2 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className={cn(
+                                'px-3 py-2 shadow-sm wrap-break-word max-w-full',
+                                isOwn
+                                  ? 'rounded-[16px_16px_0_16px] bg-primary/90 text-primary-foreground self-end'
+                                  : 'rounded-[16px_16px_16px_0] bg-muted self-start'
+                              )}>
+                                {msg.attachment && <FileAttachment attachment={msg.attachment} isOwn={isOwn} />}
+                                {msg.content && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{msg.content}</p>}
+                                <div className={cn('flex items-center gap-1 mt-1', isOwn && 'justify-end')}>
+                                  <span className={cn('text-[10px] font-light opacity-70', isOwn ? 'text-primary-foreground' : 'text-foreground')}>
+                                    {formatMsgTime(msg.created_at)}
+                                    {wasEdited && ' · edited'}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          {/* Reaction counts */}
+                          {!isEditing && msgReactions[msg.id] && Object.keys(msgReactions[msg.id]).length > 0 && (
+                            <div className={cn('flex flex-wrap gap-0.5 mt-0.5', isOwn && 'justify-end')}>
+                              {Object.entries(msgReactions[msg.id]).map(([emoji, { count, isOwn: mine }]) => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => handleMsgReact(msg.id, emoji)}
+                                  className={cn(
+                                    'flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border text-xs transition-all',
+                                    mine ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-background border-border text-foreground hover:border-primary/30'
+                                  )}
+                                >
+                                  <span className="text-sm leading-none">{emoji}</span>
+                                  {count > 1 && <span className="font-medium text-[10px] ml-0.5">{count}</span>}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           </div>
-                          {isOwn && (
-                            <button
-                              onClick={() => handleDelete(msg.id)}
-                              className="self-start mt-1 p-1 text-muted-foreground/30 hover:text-destructive opacity-0 group-hover:opacity-100 transition-all"
-                              title="Delete message"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                          {/* Hover actions */}
+                          {!isEditing && (
+                            <div className={cn(
+                              'relative flex items-center gap-0.5 self-center transition-all',
+                              emojiPickerMsgId === msg.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                              isOwn ? 'flex-row-reverse' : 'flex-row'
+                            )}>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEmojiPickerMsgId(emojiPickerMsgId === msg.id ? null : msg.id) }}
+                                className="p-1 text-muted-foreground/40 hover:text-muted-foreground rounded transition-colors"
+                                title="React"
+                              >
+                                <SmilePlus className="w-3 h-3" />
+                              </button>
+                              {emojiPickerMsgId === msg.id && (
+                                <div
+                                  className={cn(
+                                    'absolute bottom-full mb-1 flex gap-0.5 p-1.5 rounded-lg border border-border bg-background shadow-lg z-[10]',
+                                    isOwn ? 'right-0' : 'left-0'
+                                  )}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {CHAT_REACTIONS.map((e) => (
+                                    <button
+                                      key={e}
+                                      onClick={() => handleMsgReact(msg.id, e)}
+                                      className="text-base hover:scale-125 transition-transform w-7 h-7 flex items-center justify-center rounded-md hover:bg-muted"
+                                    >
+                                      {e}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {(isOwn || isAdmin) && (
+                                <>
+                                  <button
+                                    onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content || '') }}
+                                    className="p-1 text-muted-foreground/40 hover:text-primary rounded transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(msg.id)}
+                                    className="p-1 text-muted-foreground/40 hover:text-destructive rounded transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           )}
                         </div>
                       )

@@ -67,8 +67,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Manage',
     items: [
-      { to: '/work',     icon: CheckSquare,   label: 'Work' },
-      { to: '/projects', icon: FolderKanban,  label: 'Projects' },
+      { to: '/work',     icon: CheckSquare,  label: 'Work' },
+      { to: '/projects', icon: FolderKanban, label: 'Projects' },
     ],
   },
   {
@@ -112,8 +112,8 @@ function TeamSwitcherMenu({ onClose }: { onClose?: () => void }) {
     if (t.id === team?.id) { setOpen(false); return }
     await switchTeam(t.id)
     setOpen(false)
-    navigate('/posts')
     onClose?.()
+    window.location.href = '/posts'
   }
 
   return (

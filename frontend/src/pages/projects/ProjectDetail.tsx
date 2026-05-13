@@ -6,6 +6,7 @@ import { useTeam } from '../../contexts/TeamContext'
 import { TaskCard } from '../work/TaskCard'
 import { NewProjectModal } from './NewProjectModal'
 import { NewTaskModal } from '../work/NewTaskModal'
+import { ProjectGoals } from './ProjectGoals'
 import toast from 'react-hot-toast'
 
 const STATUS_STYLES: Record<string, string> = {
@@ -131,6 +132,8 @@ export default function ProjectDetail() {
           ))}
         </div>
       )}
+
+      {project && <ProjectGoals projectId={project.id} teamId={project.team_id} />}
 
       <NewProjectModal
         open={showEditProject}

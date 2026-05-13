@@ -138,6 +138,12 @@ textarea.input {
   @apply h-auto py-2;
 }
 
+.dark input[type='date'],
+.dark input[type='datetime-local'],
+.dark input[type='time'] {
+  color-scheme: dark;
+}
+
 .form-label {
   @apply block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider;
 }

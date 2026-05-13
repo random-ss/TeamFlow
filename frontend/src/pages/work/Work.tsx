@@ -277,7 +277,7 @@ export default function Work() {
           }
         />
       ) : view === 'list' ? (
-        <TaskTableView tasks={displayedTasks} onUpdate={handleUpdate} onDelete={handleDelete} />
+        <TaskTableView tasks={displayedTasks} onUpdate={handleUpdate} onDelete={handleDelete} draggable={sort === 'manual'} />
       ) : view === 'kanban' ? (
         <KanbanView
           tasks={displayedTasks}

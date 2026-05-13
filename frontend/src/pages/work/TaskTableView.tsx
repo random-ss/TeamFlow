@@ -1,10 +1,25 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Circle, Timer, Clock, CheckCircle2, CircleOff, AlertCircle,
   ArrowUp, ArrowRight, ArrowDown, Calendar, User,
   MoreHorizontal, Pencil, Trash2, Send, Check, X, XCircle,
-  CircleArrowUp, ArrowUpDown, ChevronDown,
+  CircleArrowUp, ArrowUpDown, ChevronDown, GripVertical,
 } from 'lucide-react'
+import {
+  DndContext, closestCenter, PointerSensor, KeyboardSensor,
+  useSensor, useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy,
+  useSortable, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import type { Modifier } from '@dnd-kit/core'
+
+const restrictToVerticalAxis: Modifier = ({ transform }) => ({
+  ...transform,
+  x: 0,
+})
 import { format, isPast, parseISO } from 'date-fns'
 import { Avatar } from '../../components/ui/UserAvatar'
 import { Badge } from '../../components/ui/badge'
@@ -446,15 +461,50 @@ function TaskDetail({
   )
 }
 
-/* ── Task row ───────────────────────────────────────────────────── */
-function TaskRow({
-  task, selected, onToggleSelect, onUpdate, onDelete,
+/* ── Sortable task row wrapper ─────────────────────────────────── */
+function SortableTaskRow({
+  task, selected, onToggleSelect, onUpdate, onDelete, draggable,
 }: {
   task: any
   selected: boolean
   onToggleSelect: () => void
   onUpdate?: (t: any) => void
   onDelete?: (id: string) => void
+  draggable?: boolean
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  }
+
+  return (
+    <TaskRow
+      task={task}
+      selected={selected}
+      onToggleSelect={onToggleSelect}
+      onUpdate={onUpdate}
+      onDelete={onDelete}
+      rowRef={setNodeRef}
+      rowStyle={style}
+      dragHandleProps={draggable ? { ...attributes, ...listeners } : undefined}
+    />
+  )
+}
+
+/* ── Task row ───────────────────────────────────────────────────── */
+function TaskRow({
+  task, selected, onToggleSelect, onUpdate, onDelete, rowRef, rowStyle, dragHandleProps,
+}: {
+  task: any
+  selected: boolean
+  onToggleSelect: () => void
+  onUpdate?: (t: any) => void
+  onDelete?: (id: string) => void
+  rowRef?: (el: HTMLElement | null) => void
+  rowStyle?: React.CSSProperties
+  dragHandleProps?: Record<string, any>
 }) {
   const { team } = useTeam()
   const [expanded, setExpanded] = useState(false)
@@ -482,12 +532,28 @@ function TaskRow({
   return (
     <>
       <tr
+        ref={rowRef as any}
+        style={rowStyle}
         className={cn(
           'border-b border-border transition-colors cursor-pointer',
           selected ? 'bg-primary/5' : 'hover:bg-muted/50',
           expanded && 'bg-muted/30'
         )}
       >
+        {/* Drag handle */}
+        <td className="w-8 px-1 py-3" onClick={(e) => e.stopPropagation()}>
+          {dragHandleProps ? (
+            <button
+              {...dragHandleProps}
+              className="p-1 text-muted-foreground/30 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none transition-colors"
+              title="Drag to reorder"
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <div className="w-5" />
+          )}
+        </td>
         {/* Checkbox */}
         <td className="w-10 px-3 py-3" onClick={(e) => { e.stopPropagation(); onToggleSelect() }}>
           <div className={cn(
@@ -581,7 +647,7 @@ function TaskRow({
       {/* Expanded detail */}
       {expanded && (
         <tr>
-          <td colSpan={7} className="p-0">
+          <td colSpan={8} className="p-0">
             <TaskDetail task={task} onUpdate={onUpdate} />
           </td>
         </tr>
@@ -600,14 +666,37 @@ function TaskRow({
 
 /* ── Main export ────────────────────────────────────────────────── */
 export function TaskTableView({
-  tasks, onUpdate, onDelete,
+  tasks, onUpdate, onDelete, draggable = false,
 }: {
   tasks: any[]
   onUpdate?: (t: any) => void
   onDelete?: (id: string) => void
+  draggable?: boolean
 }) {
   const { team } = useTeam()
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [localTasks, setLocalTasks] = useState(tasks)
+
+  // Sync localTasks when tasks prop changes from outside
+  useEffect(() => { setLocalTasks(tasks) }, [tasks])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  function handleDragEnd({ active, over }: any) {
+    if (!over || active.id === over.id) return
+    setLocalTasks((prev) => {
+      const oldIndex = prev.findIndex(t => t.id === active.id)
+      const newIndex = prev.findIndex(t => t.id === over.id)
+      if (oldIndex === -1 || newIndex === -1) return prev
+      const next = arrayMove(prev, oldIndex, newIndex)
+      const projectId = next[0]?.project_id ?? null
+      api.reorderTasks(team.id, projectId, next.map(t => t.id)).catch(() => {})
+      return next
+    })
+  }
 
   function toggleRow(id: string) {
     setSelected(prev => {
@@ -666,49 +755,66 @@ export function TaskTableView({
 
   if (tasks.length === 0) return null
 
+  const tableContent = (
+    <div className="overflow-hidden rounded-md border border-border">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-border bg-muted/50">
+            <th className="w-8 px-1" />
+            <th className="w-10 px-3 py-3 text-left">
+              <div
+                onClick={toggleAll}
+                className={cn(
+                  'w-4 h-4 rounded flex items-center justify-center border cursor-pointer transition-colors',
+                  allSelected
+                    ? 'bg-primary border-primary'
+                    : someSelected
+                      ? 'bg-primary/50 border-primary/50'
+                      : 'border-muted-foreground/40 hover:border-primary'
+                )}
+              >
+                {(allSelected || someSelected) && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+              </div>
+            </th>
+            <th className="py-3 px-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Title</th>
+            <th className="py-3 px-3 w-36 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+            <th className="py-3 px-3 w-32 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Priority</th>
+            <th className="py-3 px-3 w-28 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Due</th>
+            <th className="py-3 px-3 w-28 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Creator</th>
+            <th className="w-10 px-3" />
+          </tr>
+        </thead>
+        <tbody>
+          {localTasks.map((task) => (
+            <SortableTaskRow
+              key={task.id}
+              task={task}
+              selected={selected.has(task.id)}
+              onToggleSelect={() => toggleRow(task.id)}
+              onUpdate={onUpdate}
+              onDelete={onDelete}
+              draggable={draggable}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
   return (
     <>
-      <div className="overflow-hidden rounded-md border border-border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-muted/50">
-              <th className="w-10 px-3 py-3 text-left">
-                <div
-                  onClick={toggleAll}
-                  className={cn(
-                    'w-4 h-4 rounded flex items-center justify-center border cursor-pointer transition-colors',
-                    allSelected
-                      ? 'bg-primary border-primary'
-                      : someSelected
-                        ? 'bg-primary/50 border-primary/50'
-                        : 'border-muted-foreground/40 hover:border-primary'
-                  )}
-                >
-                  {(allSelected || someSelected) && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
-                </div>
-              </th>
-              <th className="py-3 px-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Title</th>
-              <th className="py-3 px-3 w-36 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-              <th className="py-3 px-3 w-32 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Priority</th>
-              <th className="py-3 px-3 w-28 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Due</th>
-              <th className="py-3 px-3 w-28 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Creator</th>
-              <th className="w-10 px-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {tasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                selected={selected.has(task.id)}
-                onToggleSelect={() => toggleRow(task.id)}
-                onUpdate={onUpdate}
-                onDelete={onDelete}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {draggable ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis]}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={localTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+            {tableContent}
+          </SortableContext>
+        </DndContext>
+      ) : tableContent}
 
       <BulkActionsBar
         selected={selected}
@@ -721,3 +827,4 @@ export function TaskTableView({
     </>
   )
 }
+

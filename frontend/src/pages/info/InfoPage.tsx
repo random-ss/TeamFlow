@@ -16,7 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  Plus, Eye, EyeOff, Copy, Check, Trash2, Link, Pin, PinOff, GripVertical,
+  Plus, Eye, EyeOff, Copy, Check, Trash2, Link, Pin, PinOff, GripVertical, X,
   BookOpen, FileText, Loader2, Upload, Download, Pencil,
   Key, Hash, MessageSquare, Bot, Image, Video, File,
   type LucideIcon,
@@ -24,12 +24,15 @@ import {
 import { api } from '../../lib/api'
 import { uploadToCloudinary, uploadFileToCloudinary } from '../../lib/cloudinary'
 import { useTeam } from '../../contexts/TeamContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useRealtime } from '../../hooks/useRealtime'
 import { INFO_TYPES, API_PROVIDERS } from '../../lib/constants'
 
 const INFO_ICON_MAP: Record<string, LucideIcon> = {
   FileText, Key, Hash, MessageSquare, Bot, Image, Video, File,
 }
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '🔥', '✅'] as const
 
 function InfoTypeIcon({ name, className }: { name: string; className?: string }) {
   const Icon = INFO_ICON_MAP[name] ?? FileText
@@ -54,10 +57,47 @@ function InfoCardContent({
   onEdit?: (item: any) => void
   dragHandle?: ReactNode
 }) {
+  const { user } = useAuth()
   const [visible, setVisible] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [contentModal, setContentModal] = useState(false)
+  const [reactions, setReactions] = useState<Record<string, { count: number; isOwn: boolean }>>({})
   const typeInfo = INFO_TYPES.find((t) => t.id === item.type)
   const providerInfo = API_PROVIDERS.find((p) => p.id === item.provider)
+
+  useEffect(() => {
+    api.getInfoItemReactions(item.id)
+      .then(({ reactions: data }) => {
+        const grouped: Record<string, { count: number; isOwn: boolean }> = {}
+        for (const r of data) {
+          if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, isOwn: false }
+          grouped[r.emoji].count++
+          if (r.user_id === user?.id) grouped[r.emoji].isOwn = true
+        }
+        setReactions(grouped)
+      })
+      .catch(() => {})
+  }, [item.id, user?.id])
+
+  async function handleReact(emoji: string) {
+    try {
+      const { added } = await api.toggleInfoReaction(item.id, emoji)
+      setReactions((prev) => {
+        const cur = prev[emoji] ?? { count: 0, isOwn: false }
+        const next = { ...prev }
+        if (added) {
+          next[emoji] = { count: cur.count + 1, isOwn: true }
+        } else {
+          const newCount = cur.count - 1
+          if (newCount <= 0) { delete next[emoji] } else { next[emoji] = { count: newCount, isOwn: false } }
+        }
+        return next
+      })
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+  }
 
   async function copyContent() {
     await navigator.clipboard.writeText(item.content || '')
@@ -85,6 +125,9 @@ function InfoCardContent({
     }
   }
 
+  const isExpandable = ['text', 'prompt', 'claude_skill'].includes(item.type) && item.content && item.content.length > 200
+  const isLarge = item.content && item.content.length > 800
+
   const renderContent = () => {
     switch (item.type) {
       case 'photo':
@@ -94,11 +137,7 @@ function InfoCardContent({
 
       case 'video':
         return item.content ? (
-          <video
-            src={item.content}
-            controls
-            className="w-full rounded-lg mt-2 max-h-48 bg-black"
-          />
+          <video src={item.content} controls className="w-full rounded-lg mt-2 max-h-48 bg-black" />
         ) : <p className="text-xs text-zinc-400 mt-2">No video</p>
 
       case 'document': {
@@ -151,7 +190,10 @@ function InfoCardContent({
       case 'claude_skill':
         return (
           <div className="mt-2 relative">
-            <pre className="text-xs text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-3 font-mono line-clamp-6">
+            <pre className={cn(
+              'text-xs text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-3 font-mono',
+              !expanded && 'line-clamp-6'
+            )}>
               {item.content}
             </pre>
             <button
@@ -160,82 +202,150 @@ function InfoCardContent({
             >
               {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
             </button>
+            {isExpandable && (
+              <button
+                onClick={() => isLarge ? setContentModal(true) : setExpanded((e) => !e)}
+                className="mt-1 text-xs text-primary hover:underline"
+              >
+                {expanded ? 'Show less' : 'Show more'}
+              </button>
+            )}
           </div>
         )
 
       default:
-        return <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap line-clamp-4">{item.content}</p>
+        return (
+          <div className="mt-2">
+            <p className={cn('text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap', !expanded && 'line-clamp-4')}>
+              {item.content}
+            </p>
+            {isExpandable && (
+              <button
+                onClick={() => isLarge ? setContentModal(true) : setExpanded((e) => !e)}
+                className="mt-1 text-xs text-primary hover:underline"
+              >
+                {expanded ? 'Show less' : 'Show more'}
+              </button>
+            )}
+          </div>
+        )
     }
   }
 
   return (
-    <div className={cn('card p-4 hover:shadow-md transition-shadow relative', item.pinned && 'ring-1 ring-primary/20')}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          {typeInfo && <InfoTypeIcon name={typeInfo.icon} className="w-4 h-4 shrink-0 text-zinc-500 dark:text-zinc-400" />}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <h3 className="text-sm font-semibold text-zinc-900 dark:text-white truncate">{item.title}</h3>
-              {item.pinned && <Pin className="w-3 h-3 shrink-0 text-primary/60 fill-current" />}
+    <>
+      {contentModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-16 overflow-y-auto"
+          onClick={(e) => { if (e.target === e.currentTarget) setContentModal(false) }}
+        >
+          <div className="w-full max-w-2xl rounded-xl border border-border bg-background shadow-xl mb-4">
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h3 className="font-semibold text-sm">{item.title}</h3>
+              <button onClick={() => setContentModal(false)} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <p className="text-xs text-zinc-400">{typeInfo?.label}</p>
+            <div className="p-4 overflow-y-auto max-h-[70vh]">
+              {item.type === 'prompt' || item.type === 'claude_skill' ? (
+                <pre className="text-sm text-foreground whitespace-pre-wrap font-mono leading-relaxed">{item.content}</pre>
+              ) : (
+                <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{item.content}</p>
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {dragHandle}
-          <button
-            onClick={handlePin}
-            className={cn(
-              'p-1 rounded transition-colors',
-              item.pinned
-                ? 'text-primary hover:text-primary/70'
-                : 'text-zinc-300 dark:text-zinc-600 hover:text-primary'
-            )}
-            title={item.pinned ? 'Unpin' : 'Pin to top'}
-          >
-            {item.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-          </button>
-          {onEdit && (
+      )}
+      <div className={cn('card p-4 hover:shadow-md transition-shadow relative', item.pinned && 'ring-1 ring-primary/20')}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {typeInfo && <InfoTypeIcon name={typeInfo.icon} className="w-4 h-4 shrink-0 text-zinc-500 dark:text-zinc-400" />}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white truncate">{item.title}</h3>
+                {item.pinned && <Pin className="w-3 h-3 shrink-0 text-primary/60 fill-current" />}
+              </div>
+              <p className="text-xs text-zinc-400">{typeInfo?.label}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {dragHandle}
             <button
-              onClick={() => onEdit(item)}
-              className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-primary transition-colors"
-              title="Edit"
+              onClick={handlePin}
+              className={cn(
+                'p-1 rounded transition-colors',
+                item.pinned
+                  ? 'text-primary hover:text-primary/70'
+                  : 'text-zinc-300 dark:text-zinc-600 hover:text-primary'
+              )}
+              title={item.pinned ? 'Unpin' : 'Pin to top'}
             >
-              <Pencil className="w-3.5 h-3.5" />
+              {item.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
             </button>
-          )}
-          <button
-            onClick={handleDelete}
-            className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-500 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+            {onEdit && (
+              <button
+                onClick={() => onEdit(item)}
+                className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-primary transition-colors"
+                title="Edit"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              onClick={handleDelete}
+              className="p-1 text-zinc-300 dark:text-zinc-600 hover:text-red-500 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {renderContent()}
+
+        {item.note && (
+          <div className="mt-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 px-3 py-2">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Note</p>
+            <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">{item.note}</p>
+          </div>
+        )}
+
+        {item.tasks && (
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-primary">
+            <Link className="w-3 h-3" />
+            <span>{item.tasks.title}</span>
+          </div>
+        )}
+
+        {item.creator && (
+          <div className="mt-3 flex items-center gap-1.5">
+            <Avatar name={item.creator?.name} src={item.creator?.avatar_url} size="xs" />
+            <span className="text-xs text-zinc-400">{item.creator?.name}</span>
+          </div>
+        )}
+
+        {/* Reactions */}
+        <div className="mt-3 flex flex-wrap items-center gap-1 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+          {REACTION_EMOJIS.map((emoji) => {
+            const r = reactions[emoji]
+            return (
+              <button
+                key={emoji}
+                onClick={() => handleReact(emoji)}
+                className={cn(
+                  'flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border transition-all',
+                  r?.isOwn
+                    ? 'bg-primary/10 border-primary/30 text-primary'
+                    : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300'
+                )}
+              >
+                <span className="text-sm leading-none">{emoji}</span>
+                {r && r.count > 0 && <span className="font-medium text-[10px] ml-0.5">{r.count}</span>}
+              </button>
+            )
+          })}
         </div>
       </div>
-
-      {renderContent()}
-
-      {item.note && (
-        <div className="mt-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 px-3 py-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Note</p>
-          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">{item.note}</p>
-        </div>
-      )}
-
-      {item.tasks && (
-        <div className="mt-3 flex items-center gap-1.5 text-xs text-primary">
-          <Link className="w-3 h-3" />
-          <span>{item.tasks.title}</span>
-        </div>
-      )}
-
-      {item.creator && (
-        <div className="mt-3 flex items-center gap-1.5">
-          <Avatar name={item.creator?.name} src={item.creator?.avatar_url} size="xs" />
-          <span className="text-xs text-zinc-400">{item.creator?.name}</span>
-        </div>
-      )}
-    </div>
+    </>
   )
 }
 

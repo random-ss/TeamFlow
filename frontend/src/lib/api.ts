@@ -595,4 +595,133 @@ export const api = {
     await supabase.from('notifications').update({ read: true }).eq('id', id)
     return {}
   },
+
+  // ── Project Goals ───────────────────────────────────────────────
+  getProjectGoals: async (projectId: string) => {
+    const { data, error } = await supabase
+      .from('project_goals')
+      .select('*, creator:profiles!created_by(id, name, avatar_url)')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true })
+    if (error) throw new Error(error.message)
+    return { goals: data || [] }
+  },
+
+  createProjectGoal: async (projectId: string, teamId: string, data: Record<string, any>) => {
+    const userId = await currentUserId()
+    const { data: goal, error } = await supabase
+      .from('project_goals')
+      .insert({ ...data, project_id: projectId, team_id: teamId, created_by: userId })
+      .select('*, creator:profiles!created_by(id, name, avatar_url)')
+      .single()
+    if (error) throw new Error(error.message)
+    return { goal }
+  },
+
+  updateProjectGoal: async (goalId: string, data: Record<string, any>) => {
+    const { data: goal, error } = await supabase
+      .from('project_goals')
+      .update(data)
+      .eq('id', goalId)
+      .select('*, creator:profiles!created_by(id, name, avatar_url)')
+      .single()
+    if (error) throw new Error(error.message)
+    return { goal }
+  },
+
+  deleteProjectGoal: async (goalId: string) => {
+    const { error } = await supabase.from('project_goals').delete().eq('id', goalId)
+    if (error) throw new Error(error.message)
+    return {}
+  },
+
+  // ── Message Edit ───────────────────────────────────────────────
+  editTeamMessage: async (messageId: string, content: string) => {
+    const { data, error } = await supabase
+      .from('team_messages')
+      .update({ content })
+      .eq('id', messageId)
+      .select(MESSAGE_SELECT)
+      .single()
+    if (error) throw new Error(error.message)
+    return { message: data }
+  },
+
+  editDM: async (messageId: string, content: string) => {
+    const { data, error } = await supabase
+      .from('direct_messages')
+      .update({ content })
+      .eq('id', messageId)
+      .select(MESSAGE_SELECT)
+      .single()
+    if (error) throw new Error(error.message)
+    return { message: data }
+  },
+
+  // ── Message Reactions ──────────────────────────────────────────
+  getMessageReactions: async (messageId: string, tableName: 'team_messages' | 'direct_messages') => {
+    const { data, error } = await supabase
+      .from('message_reactions')
+      .select('*')
+      .eq('message_id', messageId)
+      .eq('table_name', tableName)
+    if (error) throw new Error(error.message)
+    return { reactions: data || [] }
+  },
+
+  toggleMessageReaction: async (messageId: string, tableName: 'team_messages' | 'direct_messages', emoji: string) => {
+    const userId = await currentUserId()
+    const { data: existing } = await supabase
+      .from('message_reactions')
+      .select('id')
+      .eq('message_id', messageId)
+      .eq('table_name', tableName)
+      .eq('user_id', userId)
+      .eq('emoji', emoji)
+      .maybeSingle()
+    if (existing) {
+      await supabase.from('message_reactions').delete().eq('id', existing.id)
+      return { added: false }
+    } else {
+      await supabase.from('message_reactions').insert({ message_id: messageId, table_name: tableName, user_id: userId, emoji })
+      return { added: true }
+    }
+  },
+
+  // ── Info Reactions ─────────────────────────────────────────────
+  getInfoReactions: async (teamId: string) => {
+    const { data, error } = await supabase
+      .from('info_reactions')
+      .select('*, item:info_items!item_id(team_id)')
+      .eq('item.team_id', teamId)
+    if (error) throw new Error(error.message)
+    return { reactions: data || [] }
+  },
+
+  toggleInfoReaction: async (itemId: string, emoji: string) => {
+    const userId = await currentUserId()
+    const { data: existing } = await supabase
+      .from('info_reactions')
+      .select('id')
+      .eq('item_id', itemId)
+      .eq('user_id', userId)
+      .eq('emoji', emoji)
+      .maybeSingle()
+    if (existing) {
+      await supabase.from('info_reactions').delete().eq('id', existing.id)
+      return { added: false }
+    } else {
+      await supabase.from('info_reactions').insert({ item_id: itemId, user_id: userId, emoji })
+      return { added: true }
+    }
+  },
+
+  getInfoItemReactions: async (itemId: string) => {
+    const { data, error } = await supabase
+      .from('info_reactions')
+      .select('*')
+      .eq('item_id', itemId)
+    if (error) throw new Error(error.message)
+    return { reactions: data || [] }
+  },
 }
