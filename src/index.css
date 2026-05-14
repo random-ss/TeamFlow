@@ -1,0 +1,244 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..700&family=Manrope:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './styles/theme.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  html {
+    @apply scroll-smooth overflow-x-hidden;
+  }
+
+  body {
+    @apply min-h-svh w-full bg-background text-foreground font-sans antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  body[data-scroll-locked] {
+    overflow: unset !important;
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  @media screen and (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+}
+
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@utility page-container {
+  @apply p-5 sm:p-6 max-w-6xl mx-auto;
+}
+
+@utility page-container-mobile {
+  @apply p-4 sm:p-6 max-w-6xl mx-auto;
+}
+
+@utility mobile-scroll-row {
+  @apply flex items-center gap-2 overflow-x-auto;
+  &::-webkit-scrollbar { display: none; }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@utility faded-bottom {
+  @apply after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:hidden after:h-32 after:w-full after:rounded-b-2xl after:bg-[linear-gradient(180deg,transparent_10%,var(--background)_70%)] md:after:block;
+}
+
+/* ── Component classes (Tailwind v4 compatible) ─────────────────── */
+
+/* Primary button */
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 whitespace-nowrap
+         bg-primary text-primary-foreground
+         h-9 px-4 rounded-md font-medium text-sm
+         shadow-sm hover:bg-primary/90 active:scale-[0.98]
+         transition-all duration-150 ease-out
+         disabled:pointer-events-none disabled:opacity-50
+         focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 whitespace-nowrap
+         border border-input bg-background text-foreground
+         h-9 px-4 rounded-md font-medium text-sm
+         shadow-sm hover:bg-accent hover:text-accent-foreground
+         active:scale-[0.98]
+         transition-all duration-150 ease-out
+         disabled:pointer-events-none disabled:opacity-50
+         focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50;
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 whitespace-nowrap
+         h-9 px-3 rounded-md text-sm font-medium
+         hover:bg-accent hover:text-accent-foreground
+         active:scale-[0.98]
+         transition-all duration-150 ease-out
+         focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50;
+}
+
+.btn-icon {
+  @apply inline-flex items-center justify-center
+         h-9 w-9 rounded-md
+         hover:bg-accent hover:text-accent-foreground
+         transition-all duration-150 ease-out
+         focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50;
+}
+
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-2
+         bg-destructive text-destructive-foreground
+         h-9 px-4 rounded-md font-medium text-sm
+         shadow-sm hover:bg-destructive/90 active:scale-[0.98]
+         transition-all duration-150 ease-out
+         disabled:pointer-events-none disabled:opacity-50
+         focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50;
+}
+
+.input {
+  @apply flex h-9 w-full min-w-0
+         rounded-md border border-input bg-transparent
+         px-3 py-1 text-sm text-foreground
+         placeholder:text-muted-foreground
+         shadow-sm transition-[color,box-shadow] duration-150
+         outline-none
+         focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50
+         disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+textarea.input {
+  @apply h-auto py-2;
+}
+
+.dark input[type='date'],
+.dark input[type='datetime-local'],
+.dark input[type='time'] {
+  color-scheme: dark;
+}
+
+.form-label {
+  @apply block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider;
+}
+
+.card {
+  @apply flex flex-col rounded-xl border border-border
+         bg-card text-card-foreground shadow-sm;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-medium;
+}
+
+.section-title {
+  @apply text-lg font-semibold text-foreground tracking-tight;
+}
+
+.section-subtitle {
+  @apply text-sm text-muted-foreground;
+}
+
+.tab-bar {
+  @apply flex border-b border-border;
+}
+
+.tab-item {
+  @apply px-4 py-2.5 text-sm font-medium border-b-2 -mb-px
+         transition-all duration-150 whitespace-nowrap cursor-pointer;
+}
+
+.tab-item-active {
+  @apply border-foreground text-foreground;
+}
+
+.tab-item-inactive {
+  @apply border-transparent text-muted-foreground hover:text-foreground;
+}
+
+.panel {
+  @apply bg-popover text-popover-foreground
+         rounded-xl border border-border shadow-md;
+}
+
+.skeleton {
+  @apply bg-muted rounded-md animate-pulse;
+}
+
+.wp-row {
+  @apply flex items-center gap-3 px-4 py-2.5
+         border-b border-border
+         hover:bg-accent
+         transition-colors duration-100 cursor-pointer;
+}
+
+.filter-select {
+  @apply h-9 rounded-md border border-input bg-transparent
+         px-3 py-1 text-sm text-foreground
+         shadow-sm outline-none cursor-pointer
+         focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50
+         transition-[color,box-shadow] duration-150;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 9999px; }
+
+/* ── Select options ────────────────────────────────────────────── */
+select option {
+  background-color: oklch(1 0 0);
+  color: oklch(0.129 0.042 264.695);
+}
+
+.dark select option {
+  background-color: oklch(0.129 0.042 264.695);
+  color: oklch(0.984 0.003 247.858);
+}
+
+/* ── Light mode: ensure muted sections have visible bg ─────────── */
+:root .bg-muted\/40 { background-color: oklch(0.96 0.006 247.9 / 0.6); }
+
+/* ── Light mode: chat message bubbles ──────────────────────────── */
+:root .bg-muted { background-color: oklch(0.93 0.01 255 / 1); }
+
+/* ── Collapsible animations ─────────────────────────────────────── */
+.CollapsibleContent { overflow: hidden; }
+.CollapsibleContent[data-state='open']   { animation: slideDown 300ms ease-out; }
+.CollapsibleContent[data-state='closed'] { animation: slideUp 300ms ease-out; }
+
+@keyframes slideDown {
+  from { height: 0; }
+  to   { height: var(--radix-collapsible-content-height); }
+}
+
+@keyframes slideUp {
+  from { height: var(--radix-collapsible-content-height); }
+  to   { height: 0; }
+}
